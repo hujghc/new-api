@@ -143,6 +143,8 @@ export const buildApiPayload = (
     frequency_penalty: 'frequency_penalty',
     presence_penalty: 'presence_penalty',
     seed: 'seed',
+    seconds: 'seconds',
+    size: 'size',
   };
 
   Object.entries(parameterMappings).forEach(([key, param]) => {

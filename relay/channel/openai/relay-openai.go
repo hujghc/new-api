@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -107,11 +108,25 @@ func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, fo
 }
 
 // videoStatusResponse is the shape of a GET /videos/{id} response.
+type videoStatusError struct {
+	Message string          `json:"message"`
+	Code    json.RawMessage `json:"code"` // may be string or number
+}
+
+func (e *videoStatusError) CodeString() string {
+	if len(e.Code) == 0 {
+		return ""
+	}
+	// strip surrounding quotes for JSON string values, keep numbers as-is
+	s := strings.Trim(string(e.Code), `"`)
+	return s
+}
+
 type videoStatusResponse struct {
-	ID     string `json:"id"`
-	Object string `json:"object"`
-	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
+	ID     string            `json:"id"`
+	Object string            `json:"object"`
+	Status string            `json:"status"`
+	Error  *videoStatusError `json:"error,omitempty"`
 }
 
 // pollVideoUntilComplete polls GET {baseURL}/videos/{id} with Bearer auth until
@@ -201,9 +216,13 @@ func pollVideoUntilComplete(c *gin.Context, info *relaycommon.RelayInfo, videoID
 			return proxyURL, nil
 		}
 		if status.Status == "failed" {
-			errMsg := status.Error
-			if errMsg == "" {
-				errMsg = "unknown error"
+			errMsg := "unknown error"
+			if status.Error != nil {
+				if status.Error.Message != "" {
+					errMsg = status.Error.Message
+				} else if code := status.Error.CodeString(); code != "" {
+					errMsg = code
+				}
 			}
 			return "", fmt.Errorf("video generation failed: %s", errMsg)
 		}

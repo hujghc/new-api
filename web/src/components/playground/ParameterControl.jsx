@@ -21,6 +21,7 @@ import React from 'react';
 import {
   Input,
   InputNumber,
+  Select,
   Slider,
   Typography,
   Button,
@@ -36,6 +37,7 @@ import {
   Shuffle,
   Check,
   X,
+  Clock,
 } from 'lucide-react';
 
 const ParameterControl = ({
@@ -294,6 +296,95 @@ const ParameterControl = ({
           }
           className='!rounded-lg'
           disabled={!parameterEnabled.seed || disabled}
+        />
+      </div>
+
+      {/* Duration */}
+      <div
+        className={`transition-opacity duration-200 mb-4 ${!parameterEnabled.seconds || disabled ? 'opacity-50' : ''}`}
+      >
+        <div className='flex items-center justify-between mb-2'>
+          <div className='flex items-center gap-2'>
+            <Clock size={16} className='text-gray-500' />
+            <Typography.Text strong className='text-sm'>
+              {t('视频时长')}
+            </Typography.Text>
+            <Typography.Text className='text-xs text-gray-400'>
+              (seconds)，只能为偶数
+            </Typography.Text>
+          </div>
+          <Button
+            theme={parameterEnabled.seconds ? 'solid' : 'borderless'}
+            type={parameterEnabled.seconds ? 'primary' : 'tertiary'}
+            size='small'
+            icon={
+              parameterEnabled.seconds ? (
+                <Check size={10} />
+              ) : (
+                <X size={10} />
+              )
+            }
+            onClick={() => onParameterToggle('seconds')}
+            className='!rounded-full !w-4 !h-4 !p-0 !min-w-0'
+            disabled={disabled}
+          />
+        </div>
+        <InputNumber
+          value={inputs.seconds}
+          onNumberChange={(value) => onInputChange('seconds', value)}
+          min={1}
+          precision={0}
+          suffix='s'
+          style={{ width: '100%' }}
+          disabled={!parameterEnabled.seconds || disabled}
+        />
+      </div>
+
+      {/* Size */}
+      <div
+        className={`transition-opacity duration-200 mb-4 ${!parameterEnabled.size || disabled ? 'opacity-50' : ''}`}
+      >
+        <div className='flex items-center justify-between mb-2'>
+          <div className='flex items-center gap-2'>
+            <Hash size={16} className='text-gray-500' />
+            <Typography.Text strong className='text-sm'>
+              {t('视频分辨率')}
+            </Typography.Text>
+          </div>
+          <Button
+            theme={parameterEnabled.size ? 'solid' : 'borderless'}
+            type={parameterEnabled.size ? 'primary' : 'tertiary'}
+            size='small'
+            icon={
+              parameterEnabled.size ? (
+                <Check size={10} />
+              ) : (
+                <X size={10} />
+              )
+            }
+            onClick={() => onParameterToggle('size')}
+            className='!rounded-full !w-4 !h-4 !p-0 !min-w-0'
+            disabled={disabled}
+          />
+        </div>
+        <Select
+          value={inputs.size || undefined}
+          onChange={(value) => onInputChange('size', value)}
+          placeholder={t('选择分辨率')}
+          style={{ width: '100%' }}
+          className='!rounded-lg'
+          disabled={!parameterEnabled.size || disabled}
+          optionList={[
+            { value: '540p', label: '540p' },
+            { value: '720p', label: '720p' },
+            { value: '1080p', label: '1080p' },
+            { value: '768P', label: '768P(Hailuo)' },
+            { value: '1080P', label: '1080P(Hailuo)' },
+            { value: '720x1280', label: '720x1280 (竖屏)' },
+            { value: '1280x720', label: '1280x720 (横屏)' },
+            { value: '1792x1024', label: '1792x1024 (横屏宽)' },
+            { value: '1024x1792', label: '1024x1792 (竖屏高)' },
+          ]}
         />
       </div>
     </>

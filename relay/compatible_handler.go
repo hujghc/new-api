@@ -34,6 +34,32 @@ func extractImagePromptFromMessages(messages []dto.Message) string {
 	return ""
 }
 
+// extractImagesFromMessages collects all image URLs from the last user message
+// in multimodal content, returning them as a flat string slice.
+func extractImagesFromMessages(messages []dto.Message) []string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if msg.Role != "user" {
+			continue
+		}
+		mediaList := msg.ParseContent()
+		if len(mediaList) == 0 {
+			return nil
+		}
+		var urls []string
+		for _, item := range mediaList {
+			if item.Type != dto.ContentTypeImageURL {
+				continue
+			}
+			if imgURL := item.GetImageMedia(); imgURL != nil && imgURL.Url != "" {
+				urls = append(urls, imgURL.Url)
+			}
+		}
+		return urls
+	}
+	return nil
+}
+
 // isChatOnlyImageModel returns true for image-generation models that do not
 // support the chat-completions endpoint (e.g. gpt-image-*, dall-e-*,
 // chatgpt-image-*). Requests for these models received on /v1/chat/completions
@@ -143,9 +169,19 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 
 	// For playground requests with video/image generation models, auto-populate
 	// prompt from the last user message when not already provided.
-	// Plain chat models do not use the prompt field.
-	if info.IsPlayground && request.Prompt == nil && isVideoGenerationModel(request.Model) {
-		request.Prompt = extractImagePromptFromMessages(request.Messages)
+	// Also extract image URLs from multimodal messages into the image field.
+	if info.IsPlayground && isVideoGenerationModel(request.Model) {
+		// Always ensure prompt is a plain string: covers nil, array content, or empty cases.
+		if promptStr, ok := request.Prompt.(string); !ok || promptStr == "" {
+			request.Prompt = extractImagePromptFromMessages(request.Messages)
+		}
+		if len(request.Image) == 0 && len(request.InputReference) == 0 {
+			imgs := extractImagesFromMessages(request.Messages)
+			if len(imgs) > 0 {
+				// request.Image = imgs
+				request.InputReference = []dto.InputReferenceItem{{Image: imgs}}
+			}
+		}
 	}
 
 	includeUsage := true

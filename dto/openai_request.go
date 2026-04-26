@@ -106,6 +106,10 @@ type GeneralOpenAIRequest struct {
 	SearchMode             json.RawMessage `json:"search_mode,omitempty"`
 	// Minimax
 	ReasoningSplit json.RawMessage `json:"reasoning_split,omitempty"`
+	// Video generation
+	Seconds        *int                   `json:"seconds,omitempty"`
+	Image          []string               `json:"image,omitempty"`
+	InputReference []InputReferenceItem   `json:"input_reference,omitempty"`
 }
 
 func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
@@ -420,6 +424,12 @@ type MessageFile struct {
 
 type MessageVideoUrl struct {
 	Url string `json:"url"`
+}
+
+// InputReferenceItem wraps image URLs for video generation APIs that require
+// the input_reference array format (e.g. sora-2).
+type InputReferenceItem struct {
+	Image []string `json:"image,omitempty"`
 }
 
 const (

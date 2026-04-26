@@ -408,6 +408,25 @@ export const useApiRequest = (
               streamMessageUpdate(videoContent, 'content');
             }
           }
+
+          // Handle top-level error field (e.g. video generation failed)
+          if (payload.error) {
+            const errMsg = payload.error.message || t('请求发生错误');
+            const errCode = payload.error.code || null;
+            setMessage((prevMessage) => {
+              const newMessages = [...prevMessage];
+              const lastMessage = newMessages[newMessages.length - 1];
+              if (lastMessage && lastMessage.status !== MESSAGE_STATUS.COMPLETE && lastMessage.status !== MESSAGE_STATUS.ERROR) {
+                newMessages[newMessages.length - 1] = {
+                  ...lastMessage,
+                  content: errMsg,
+                  errorCode: errCode,
+                  status: MESSAGE_STATUS.ERROR,
+                };
+              }
+              return newMessages;
+            });
+          }
         } catch (error) {
           console.error('Failed to parse SSE message:', error);
           const errorInfo = `解析错误: ${error.message}`;
@@ -426,52 +445,53 @@ export const useApiRequest = (
       });
 
       source.addEventListener('error', (e) => {
-        // 只有在流没有正常完成且连接状态异常时才处理错误
-        if (!isStreamComplete && source.readyState !== 2) {
-          console.error('SSE Error:', e);
-          let errorMessage = e.data || t('请求发生错误');
-          let errorCode = null;
+        // 正常完成后的关闭事件不处理；但如果有错误数据（HTTP 错误），即使 readyState=2 也要处理
+        if (isStreamComplete) return;
+        if (source.readyState === 2 && !e.data) return;
 
-          if (e.data) {
-            try {
-              const errorJson = JSON.parse(e.data);
-              if (errorJson?.error) {
-                errorMessage = errorJson.error.message || errorMessage;
-                errorCode = errorJson.error.code || null;
-              }
-            } catch (_) {
-              // not JSON, use raw data as error message
+        console.error('SSE Error:', e);
+        let errorMessage = e.data || t('请求发生错误');
+        let errorCode = null;
+
+        if (e.data) {
+          try {
+            const errorJson = JSON.parse(e.data);
+            if (errorJson?.error) {
+              errorMessage = errorJson.error.message || errorMessage;
+              errorCode = errorJson.error.code || null;
             }
+          } catch (_) {
+            // not JSON, use raw data as error message
           }
-
-          const errorInfo = handleApiError(new Error(errorMessage));
-          errorInfo.readyState = source.readyState;
-
-          setDebugData((prev) => ({
-            ...prev,
-            response:
-              responseData +
-              '\n\nSSE Error:\n' +
-              JSON.stringify(errorInfo, null, 2),
-          }));
-          setActiveDebugTab(DEBUG_TABS.RESPONSE);
-
-          setMessage((prevMessage) => {
-            const newMessages = [...prevMessage];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage && lastMessage.status !== MESSAGE_STATUS.COMPLETE && lastMessage.status !== MESSAGE_STATUS.ERROR) {
-              newMessages[newMessages.length - 1] = {
-                ...lastMessage,
-                content: (lastMessage.content || '') + errorMessage,
-                errorCode: errorCode,
-                status: MESSAGE_STATUS.ERROR,
-              };
-            }
-            return newMessages;
-          });
-          sseSourceRef.current = null;
-          source.close();
         }
+
+        const errorInfo = handleApiError(new Error(errorMessage));
+        errorInfo.readyState = source.readyState;
+
+        setDebugData((prev) => ({
+          ...prev,
+          response:
+            responseData +
+            '\n\nSSE Error:\n' +
+            JSON.stringify(errorInfo, null, 2),
+        }));
+        setActiveDebugTab(DEBUG_TABS.RESPONSE);
+
+        setMessage((prevMessage) => {
+          const newMessages = [...prevMessage];
+          const lastMessage = newMessages[newMessages.length - 1];
+          if (lastMessage && lastMessage.status !== MESSAGE_STATUS.COMPLETE && lastMessage.status !== MESSAGE_STATUS.ERROR) {
+            newMessages[newMessages.length - 1] = {
+              ...lastMessage,
+              content: (lastMessage.content || '') + errorMessage,
+              errorCode: errorCode,
+              status: MESSAGE_STATUS.ERROR,
+            };
+          }
+          return newMessages;
+        });
+        sseSourceRef.current = null;
+        source.close();
       });
 
       source.addEventListener('readystatechange', (e) => {
