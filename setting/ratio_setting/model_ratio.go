@@ -351,6 +351,7 @@ func InitRatioSettings() {
 	audioCompletionRatioMap.AddAll(defaultAudioCompletionRatio)
 	contextTierRatioMap.AddAll(defaultContextTierRatio)
 	audioMinutePriceMap.AddAll(defaultAudioMinutePrice)
+	videoMinutePriceMap.AddAll(defaultVideoMinutePrice)
 }
 
 func GetModelPriceMap() map[string]float64 {
@@ -789,5 +790,26 @@ func UpdateAudioMinutePriceByJSONString(jsonStr string) error {
 func GetAudioMinutePrice(name string) (float64, bool) {
 	name = FormatMatchingModelName(name)
 	price, ok := audioMinutePriceMap.Get(name)
+	return price, ok
+}
+
+// VideoMinutePrice — 按视频时长（分钟）计费，适用于视频生成模型
+// key: 模型名, value: 每分钟视频的价格（美元）
+var defaultVideoMinutePrice = map[string]float64{}
+
+var videoMinutePriceMap = types.NewRWMap[string, float64]()
+
+func VideoMinutePrice2JSONString() string {
+	return videoMinutePriceMap.MarshalJSONString()
+}
+
+func UpdateVideoMinutePriceByJSONString(jsonStr string) error {
+	return types.LoadFromJsonStringWithCallback(videoMinutePriceMap, jsonStr, InvalidateExposedDataCache)
+}
+
+// GetVideoMinutePrice 返回模型的每分钟视频价格（美元），若未配置返回 0, false
+func GetVideoMinutePrice(name string) (float64, bool) {
+	name = FormatMatchingModelName(name)
+	price, ok := videoMinutePriceMap.Get(name)
 	return price, ok
 }

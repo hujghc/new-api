@@ -184,6 +184,11 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		}
 	}
 
+	// 视频模型：将请求中的 seconds 写入 RelayInfo，供后续按时长计费使用
+	if isVideoGenerationModel(request.Model) && request.Seconds != nil && *request.Seconds > 0 {
+		info.VideoDurationSeconds = float64(*request.Seconds)
+	}
+
 	includeUsage := true
 	// 判断用户是否需要返回使用情况
 	if request.StreamOptions != nil {
@@ -347,7 +352,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	var containAudioTokens = usage.(*dto.Usage).CompletionTokenDetails.AudioTokens > 0 || usage.(*dto.Usage).PromptTokensDetails.AudioTokens > 0
 	var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
 
-	if containAudioTokens && containsAudioRatios {
+	if info.VideoDurationSeconds > 0 {
+		service.PostVideoConsumeQuota(c, info, usage.(*dto.Usage), "")
+	} else if containAudioTokens && containsAudioRatios {
 		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), "")
 	} else {
 		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)

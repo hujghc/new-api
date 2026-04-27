@@ -346,6 +346,23 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	}
 
 	resp, err := doRequest(c, req, info)
+	if common2.DebugEnabled {
+		var sb strings.Builder
+		sb.WriteString("\n========== Upstream Response ==========\n")
+		if resp != nil {
+			sb.WriteString(fmt.Sprintf("Status: %s\n", resp.Status))
+			if resp.Body != nil {
+				body, _ := io.ReadAll(resp.Body)
+				sb.WriteString(fmt.Sprintf("Body: %s\n", string(body)))
+				// need to restore body for downstream processing
+				resp.Body = io.NopCloser(strings.NewReader(string(body)))
+			}
+		} else {
+			sb.WriteString("No response received.\n")
+		}
+		sb.WriteString("======================================")
+		logger.LogDebug(c.Request.Context(), sb.String())
+	}
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
 	}

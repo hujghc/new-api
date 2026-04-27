@@ -352,6 +352,61 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	})
 }
 
+func PostVideoConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent string) {
+	videoMinutePrice := relayInfo.PriceData.VideoMinutePrice
+	groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
+
+	if videoMinutePrice <= 0 || relayInfo.VideoDurationSeconds <= 0 {
+		// 降级为 token 计费
+		PostTextConsumeQuota(ctx, relayInfo, usage, nil)
+		return
+	}
+
+	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
+	tokenName := ctx.GetString("token_name")
+
+	durationMinutes := relayInfo.VideoDurationSeconds / 60.0
+	quotaDecimal := decimal.NewFromFloat(durationMinutes).
+		Mul(decimal.NewFromFloat(videoMinutePrice)).
+		Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
+		Mul(decimal.NewFromFloat(groupRatio))
+	quota := int(quotaDecimal.Round(0).IntPart())
+	logContent := fmt.Sprintf("按时长计费：%.1f 秒（%.4f 分钟），每分钟 $%.4f，分组倍率 %.2f",
+		relayInfo.VideoDurationSeconds, durationMinutes, videoMinutePrice, groupRatio)
+	if extraContent != "" {
+		logContent += ", " + extraContent
+	}
+
+	if relayInfo.VideoDurationSeconds == 0 {
+		quota = 0
+	} else {
+		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
+		model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
+	}
+
+	if err := SettleBilling(ctx, relayInfo, quota); err != nil {
+		logger.LogError(ctx, "error settling billing: "+err.Error())
+	}
+
+	other := GenerateTextOtherInfo(ctx, relayInfo, relayInfo.PriceData.ModelRatio, groupRatio,
+		relayInfo.PriceData.CompletionRatio, 0, relayInfo.PriceData.CacheRatio,
+		relayInfo.PriceData.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
+	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
+		ChannelId:        relayInfo.ChannelId,
+		PromptTokens:     usage.PromptTokens,
+		CompletionTokens: usage.CompletionTokens,
+		ModelName:        relayInfo.OriginModelName,
+		TokenName:        tokenName,
+		Quota:            quota,
+		Content:          logContent,
+		TokenId:          relayInfo.TokenId,
+		UseTimeSeconds:   int(useTimeSeconds),
+		IsStream:         relayInfo.IsStream,
+		Group:            relayInfo.UsingGroup,
+		Other:            other,
+	})
+}
+
 func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")

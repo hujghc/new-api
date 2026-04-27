@@ -50,6 +50,7 @@ export default function ModelRatioSettings(props) {
     AudioCompletionRatio: '',
     ContextTierRatio: '',
     AudioMinutePrice: '',
+    VideoMinutePrice: '',
     ExposeRatioEnabled: false,
   });
   const refForm = useRef();
@@ -369,6 +370,32 @@ export default function ModelRatioSettings(props) {
               ]}
               onChange={(value) =>
                 setInputs({ ...inputs, AudioMinutePrice: value })
+              }
+            />
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
+            <Form.TextArea
+              label={t('视频生成按分钟计费')}
+              extraText={t(
+                '适用于视频生成模型按时长计费，优先级高于 Token 计费。值为每分钟价格（美元），需要请求中包含 seconds 字段',
+              )}
+              placeholder={t(
+                '为一个 JSON 文本，键为模型名称，值为每分钟美元价格，例如：{"sora": 0.03}',
+              )}
+              field={'VideoMinutePrice'}
+              autosize={{ minRows: 4, maxRows: 8 }}
+              trigger='blur'
+              stopValidateWithError
+              rules={[
+                {
+                  validator: (rule, value) => verifyJSON(value),
+                  message: '不是合法的 JSON 字符串',
+                },
+              ]}
+              onChange={(value) =>
+                setInputs({ ...inputs, VideoMinutePrice: value })
               }
             />
           </Col>
