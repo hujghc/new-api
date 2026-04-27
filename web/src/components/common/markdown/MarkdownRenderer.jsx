@@ -521,11 +521,10 @@ function _MarkdownContent(props) {
             return (
               <video
                 controls
-                preload='auto'
+                preload='metadata'
+                src={href}
                 style={{ width: '100%', maxWidth: '100%', margin: '12px 0' }}
-              >
-                <source src={href} type='video/mp4' />
-              </video>
+              />
             );
           }
           const isInternal = /^\/#/i.test(href);

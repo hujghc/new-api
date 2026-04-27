@@ -141,7 +141,7 @@ func pollVideoUntilComplete(c *gin.Context, info *relaycommon.RelayInfo, videoID
 		delta := dto.ChatCompletionsStreamResponseChoiceDelta{}
 		delta.SetContentString(msg)
 		chunk := dto.ChatCompletionsStreamResponse{
-			Id:      "video-poll",
+			Id:      videoID,
 			Object:  "chat.completion.chunk",
 			Created: time.Now().Unix(),
 			Model:   info.UpstreamModelName,
@@ -258,18 +258,24 @@ func handleVideoStreamData(c *gin.Context, info *relaycommon.RelayInfo, lastStre
 	contentURL, err := pollVideoUntilComplete(c, info, raw.ID)
 	if err != nil {
 		logger.LogError(c, "video polling failed: "+err.Error())
-		errDelta := dto.ChatCompletionsStreamResponseChoiceDelta{}
-		errDelta.SetContentString("❌ 视频生成失败: " + err.Error())
-		chunk := dto.ChatCompletionsStreamResponse{
+		type videoError struct {
+			Message string `json:"message"`
+			Code    string `json:"code"`
+		}
+		type errorChunk struct {
+			Id      string     `json:"id"`
+			Object  string     `json:"object"`
+			Created int64      `json:"created"`
+			Model   string     `json:"model"`
+			Error   videoError `json:"error"`
+		}
+		_ = helper.ObjectData(c, errorChunk{
 			Id:      raw.ID,
 			Object:  "chat.completion.chunk",
 			Created: time.Now().Unix(),
 			Model:   info.UpstreamModelName,
-			Choices: []dto.ChatCompletionsStreamResponseChoice{
-				{Delta: errDelta},
-			},
-		}
-		_ = helper.ObjectData(c, chunk)
+			Error:   videoError{Message: err.Error(), Code: "video_generation_failed"},
+		})
 		helper.Done(c)
 		return true
 	}
@@ -781,17 +787,27 @@ func writePlaygroundImageSSE(c *gin.Context, responseBody []byte) {
 	}
 	content := strings.Join(contentParts, "\n\n")
 
-	contentChunk := dto.ChatCompletionsStreamResponse{
-		Choices: []dto.ChatCompletionsStreamResponseChoice{{
-			Index: 0,
-			Delta: dto.ChatCompletionsStreamResponseChoiceDelta{
-				Role:    "assistant",
-				Content: &content,
-			},
-		}},
-	}
-	if chunkBytes, err := common.Marshal(contentChunk); err == nil {
-		_ = helper.StringData(c, string(chunkBytes))
+	// Split large content (e.g. base64 images) into chunks to avoid sending a
+	// single enormous SSE data line that nginx or SSE clients may struggle with.
+	const chunkSize = 32 * 1024 // 32 KB per SSE chunk
+	for i := 0; i < len(content); i += chunkSize {
+		end := i + chunkSize
+		if end > len(content) {
+			end = len(content)
+		}
+		part := content[i:end]
+		partChunk := dto.ChatCompletionsStreamResponse{
+			Choices: []dto.ChatCompletionsStreamResponseChoice{{
+				Index: 0,
+				Delta: dto.ChatCompletionsStreamResponseChoiceDelta{
+					Role:    "assistant",
+					Content: &part,
+				},
+			}},
+		}
+		if chunkBytes, err := common.Marshal(partChunk); err == nil {
+			_ = helper.StringData(c, string(chunkBytes))
+		}
 	}
 
 	finishReason := "stop"

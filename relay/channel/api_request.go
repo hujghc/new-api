@@ -315,6 +315,10 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		return nil, fmt.Errorf("new request failed: %w", err)
 	}
 	headers := req.Header
+	reqestId := c.Request.Context().Value(common2.RequestIdKey)
+	if reqestId != nil {
+		headers.Set("X-Request-Id", reqestId.(string))
+	}
 	err = a.SetupRequestHeader(c, &headers, info)
 	if err != nil {
 		return nil, fmt.Errorf("setup request header failed: %w", err)

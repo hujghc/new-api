@@ -92,6 +92,30 @@ func isTTSModel(model string) bool {
 		strings.Contains(lower, "sambert")
 }
 
+// sendVideoSSEError sends an error through an already-open SSE connection and
+// closes the stream with [DONE], used when we've pre-started SSE for video.
+func sendVideoSSEError(c *gin.Context, model string, errMsg string) {
+	type videoError struct {
+		Message string `json:"message"`
+		Code    string `json:"code"`
+	}
+	type errorChunk struct {
+		Id      string     `json:"id"`
+		Object  string     `json:"object"`
+		Created int64      `json:"created"`
+		Model   string     `json:"model"`
+		Error   videoError `json:"error"`
+	}
+	_ = helper.ObjectData(c, errorChunk{
+		Id:      "video-error",
+		Object:  "chat.completion.chunk",
+		Created: 0,
+		Model:   model,
+		Error:   videoError{Message: errMsg, Code: "video_generation_failed"},
+	})
+	helper.Done(c)
+}
+
 func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	// Detect image-generation models submitted to chat-completions endpoint and
 	// redirect to ImageHelper so the correct upstream endpoint and response
@@ -323,9 +347,35 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		requestBody = bytes.NewBuffer(jsonData)
 	}
 
+	// For playground video generation, start SSE immediately and send a
+	// "submitting" message so the client sees feedback right away instead
+	// of waiting in silence while the upstream accepts the job (can be 10-20s).
+	isPlaygroundVideoStream := info.IsPlayground && isVideoGenerationModel(request.Model) && lo.FromPtrOr(request.Stream, false)
+	if isPlaygroundVideoStream {
+		helper.SetEventStreamHeaders(c)
+		submitChunk := dto.ChatCompletionsStreamResponse{
+			Id:      "video-submit",
+			Object:  "chat.completion.chunk",
+			Created: 0,
+			Model:   request.Model,
+			Choices: []dto.ChatCompletionsStreamResponseChoice{
+				{Delta: func() dto.ChatCompletionsStreamResponseChoiceDelta {
+					d := dto.ChatCompletionsStreamResponseChoiceDelta{}
+					d.SetContentString("⏳ 正在提交视频生成任务...\n\n")
+					return d
+				}()},
+			},
+		}
+		_ = helper.ObjectData(c, submitChunk)
+	}
+
 	var httpResp *http.Response
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
+		if isPlaygroundVideoStream {
+			sendVideoSSEError(c, request.Model, err.Error())
+			return nil
+		}
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
 
@@ -338,6 +388,10 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			newApiErr := service.RelayErrorHandler(c.Request.Context(), httpResp, false)
 			// reset status code 重置状态码
 			service.ResetStatusCode(newApiErr, statusCodeMappingStr)
+			if isPlaygroundVideoStream {
+				sendVideoSSEError(c, request.Model, newApiErr.Error())
+				return nil
+			}
 			return newApiErr
 		}
 	}

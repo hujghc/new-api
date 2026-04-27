@@ -413,13 +413,15 @@ export const useApiRequest = (
           if (payload.error) {
             const errMsg = payload.error.message || t('请求发生错误');
             const errCode = payload.error.code || null;
+            const videoId = payload.id && payload.id !== 'video-poll' ? `\nID: ${payload.id}` : '';
             setMessage((prevMessage) => {
               const newMessages = [...prevMessage];
               const lastMessage = newMessages[newMessages.length - 1];
               if (lastMessage && lastMessage.status !== MESSAGE_STATUS.COMPLETE && lastMessage.status !== MESSAGE_STATUS.ERROR) {
+                const prevContent = lastMessage.content || '';
                 newMessages[newMessages.length - 1] = {
                   ...lastMessage,
-                  content: errMsg,
+                  content: prevContent + '\n\n❌ ' + errMsg + videoId,
                   errorCode: errCode,
                   status: MESSAGE_STATUS.ERROR,
                 };

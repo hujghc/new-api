@@ -131,7 +131,7 @@ func PlaygroundVideoProxy(c *gin.Context) {
 	if cl := resp.Header.Get("Content-Length"); cl != "" {
 		c.Header("Content-Length", cl)
 	}
-	c.Header("Cache-Control", "no-store")
+	c.Header("Cache-Control", "public, max-age=3600")
 
 	c.Status(http.StatusOK)
 	io.Copy(c.Writer, resp.Body) //nolint:errcheck
